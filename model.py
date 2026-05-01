@@ -4,7 +4,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from utils import Arguments
 import torch.nn as nn
 
-class Bert4TextClassification(nn.Module):
+class Bert4NER(nn.Module):
     def __init__(self,config):
         super().__init__()
         self.lr=config.lr
@@ -14,9 +14,11 @@ class Bert4TextClassification(nn.Module):
         self.fc = nn.Linear(config.embedding_dim, config.class_num)
     def forward(self, input_ids, attention_mask):
         outputs = self.bert(input_ids=input_ids, attention_mask=attention_mask)
-        pooled_output = outputs.pooler_output
-        pooled_output = self.dropout(pooled_output)
-        logits = self.fc(pooled_output)
+        last_hidden_state = outputs.last_hidden_state
+        last_hidden_state = self.dropout(last_hidden_state)
+        logits = self.fc(last_hidden_state)
+        batch_size,seq_len,class_num=logits.shape
+        logits=logits.view((batch_size*seq_len,class_num))
         return logits
     def get_optimizer(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr, weight_decay=self.weight_decay)

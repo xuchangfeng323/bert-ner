@@ -3,11 +3,11 @@ from utils import EarlyStop
 import swanlab
 from tqdm import tqdm
 import torch
-from model import Bert4TextClassification
+from model import Bert4NER
 
 from utils import load_data
 import torch.nn as nn
-from utils import get_next,write_log,Arguments
+from utils import get_next,write_log,Arguments,Metrics
 import os
 
 class Trainer:
@@ -18,6 +18,7 @@ class Trainer:
         self.num_epochs=config.num_epochs
         self.config=config
         self.loss_fn = nn.CrossEntropyLoss()
+        print(config.get_args_dict())
         self.metrics = Metrics(num_classes=config.class_num)
         self.best_accuracy = 0.0
         self.save_dir = get_next(config.save_dir)
@@ -30,8 +31,8 @@ class Trainer:
         model.to(self.device)
         self.scheduler=scheduler
         swanlab.init(
-            project="demo1",  
-            name="bert",                
+            project="weibo_ner",  
+            name="bert4ner",                
             config={
                 "num_epochs": self.config.num_epochs,
                 "lr": self.config.lr,
@@ -49,6 +50,7 @@ class Trainer:
                 self.optimizer.zero_grad()
                 input_ids = input_ids.to(self.device)
                 attention_mask = attention_mask.to(self.device)
+                labels=labels.view(-1)
                 labels = labels.to(self.device)
                 logits = self.model(input_ids, attention_mask)
                 loss=self.loss_fn(logits, labels)
@@ -95,6 +97,7 @@ class Trainer:
             for input_ids, attention_mask, labels in progress_bar:
                 input_ids = input_ids.to(self.device)
                 attention_mask = attention_mask.to(self.device)
+                labels=labels.view(-1)
                 labels = labels.to(self.device)
                 logits = self.model(input_ids, attention_mask)
                 loss_fn = self.loss_fn
@@ -111,9 +114,11 @@ class Trainer:
         avg_eval_loss = total_eval_loss / len(devdataLoader)
         eval_accuracy = eval_correct / total_samples  
         print(f"Eval Accuracy: {eval_accuracy:.4f}")
+        print(f"Eval Loss: {avg_eval_loss:.4f}")
         swanlab.log({
             "eval/loss": avg_eval_loss,
             "eval/accuracy": eval_accuracy,
+            
             
         })
 
@@ -132,6 +137,7 @@ class Trainer:
             for  input_ids, attention_mask, labels in progress_bar:
                 input_ids = input_ids.to(self.device)
                 attention_mask = attention_mask.to(self.device)
+                labels=labels.view(-1)
                 labels = labels.to(self.device)
                 logits = self.model(input_ids, attention_mask)
                 loss_fn = self.loss_fn
@@ -151,19 +157,17 @@ class Trainer:
             "test/results": results_dict
         }
         write_log(self.log_dir, {"test": log_dict})
-                
-        
-        
-        print(f"Test Accuracy: {test_accuracy:.4f}")
         swanlab.log({
             "test/loss": avg_test_loss,
-            "test/accuracy": test_accuracy
+            "test/accuracy": test_accuracy,
+            
         })
+        print(results_dict)
 if __name__ == "__main__":
     args=Arguments("./args/arg1.json")
-    model=Bert4TextClassification(args)
-    optimizer, scheduler = model.get_optimizer()
     traindataLoader, devdataLoader, testdataLoader = load_data(args)
+    model=Bert4NER(args)
+    optimizer, scheduler = model.get_optimizer()
     trainer=Trainer(args)
     trainer.train(traindataLoader, devdataLoader, testdataLoader, model, optimizer, scheduler)
 

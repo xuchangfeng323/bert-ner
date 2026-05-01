@@ -1,15 +1,12 @@
 import os
-
 import pandas as pd
-from transformers import BertTokenizer
-import torch
+from transformers import BertTokenizerFast
 from MyDataset import ToutiaoDataset
-
-import pandas as pd
 import torch
 from sklearn.model_selection import train_test_split
 import json
 import numpy as np
+label2id, id2label=None, None
 def get_next(prefix_dir):
     if not os.path.exists(prefix_dir):
         os.makedirs(prefix_dir+'exp1')
@@ -26,23 +23,85 @@ def get_next(prefix_dir):
         os.makedirs(prefix_dir+'/exp'+str(next_num))
         return prefix_dir+'/exp'+str(next_num)
 
+def build_label_mappings(labels, save_path=None):
+    unique_labels = set()
+    for seq in labels:
+        for tag in seq:
+            unique_labels.add(tag)
+    unique_labels = sorted(unique_labels)
+    
+    label2id = {label: i for i, label in enumerate(unique_labels)}
+    id2label = {i: label for label, i in label2id.items()}
+    if save_path:
+        mappings = {"label2id": label2id, "id2label": id2label}
+        with open(save_path, "w", encoding="utf-8") as f:
+            json.dump(mappings, f, ensure_ascii=False, indent=4)
+        print(f"Label mappings saved to {save_path}")
+    
+    return label2id, id2label
 
+def get_sentences(dir_path):
+    sentence = []
+    tag = []
+    sentences_list = []
+    tags_list = []
+    for line in open(dir_path,encoding='utf-8'):
+        if line[0] == '\n':
+            
+            sentences_list.append(sentence)
+            tags_list.append(tag)
+            sentence = []
+            tag = []
+            continue
+        else:
+            parts = line.strip().split()
+            if len(parts) != 2:
+                continue
+            sentence.append(parts[0])
+            tag.append(parts[1])
+    return {'sentences':sentences_list,'tags':tags_list}
+
+        
+
+        
     
 def load_data(config):
     data_dir=config.data_path
-    df_train = pd.read_csv(os.path.join(data_dir, 'train.csv'))
-    df_test = pd.read_csv(os.path.join(data_dir, 'test.csv'))
-    df_dev = pd.read_csv(os.path.join(data_dir, 'dev.csv'))
-    train_data = df_train['text'].tolist()
-    train_labels = df_train['label'].tolist()
-    test_data = df_test['text'].tolist()
-    test_labels = df_test['label'].tolist()
-    dev_data = df_dev['text'].tolist()
-    dev_labels = df_dev['label'].tolist()
-    tokenizer = BertTokenizer.from_pretrained(config.model_dir)
-    train_dataset = ToutiaoDataset(train_data, train_labels,tokenizer,config.max_length)
-    test_dataset = ToutiaoDataset(test_data, test_labels,tokenizer,config.max_length)
-    dev_dataset = ToutiaoDataset(dev_data, dev_labels,tokenizer,config.max_length)
+    headers=[
+    "id",
+    "label",
+    "channel",
+    "title",
+    "keywords"
+]
+    train_data = get_sentences(os.path.join(data_dir, 'train.txt'))
+    test_data = get_sentences(os.path.join(data_dir, 'test.txt'))
+    dev_data = get_sentences(os.path.join(data_dir, 'dev.txt'))
+    label2id, id2label = build_label_mappings(train_data['tags'], save_path=os.path.join(data_dir, 'label2id.json'))
+    config.set_class_num(len(label2id))
+    known_labels = set(label2id.keys())
+    tags_list = {
+        "train": train_data["tags"],
+        "dev": dev_data["tags"],
+        "test": test_data["tags"]
+    }
+    for name, tags_list in tags_list.items():
+        unknown_labels = set()
+        for i in range(len(tags_list)):
+            for j in range(len(tags_list[i])):
+                if tags_list[i][j] not in known_labels:
+                    unknown_labels.add(tags_list[i][j])
+                else:
+                    tags_list[i][j] = label2id[tags_list[i][j]]
+        
+        if unknown_labels:
+            raise ValueError(
+                f"{name} 集中存在训练集 label2id 未覆盖的标签: {sorted(unknown_labels)}"
+            )
+    tokenizer = BertTokenizerFast.from_pretrained(config.model_dir)
+    train_dataset = ToutiaoDataset(train_data,tokenizer,config.max_length)
+    test_dataset = ToutiaoDataset(test_data,tokenizer,config.max_length)
+    dev_dataset = ToutiaoDataset(dev_data,tokenizer,config.max_length)
 
     train_dataLoader = train_dataset.get_data_loader(batch_size=config.batch_size)
     dev_dataLoader = dev_dataset.get_data_loader(batch_size=config.batch_size,shuffle=False)
@@ -56,6 +115,7 @@ def write_log(log_jsonl_path, log_dict):
 class Metrics:
     def __init__(self, num_classes):
         self.num_classes = num_classes
+        print(f"num_classes: {num_classes}")
         self.confusion_matrix = [[0 for _ in range(self.num_classes)] 
                                   for _ in range(self.num_classes)]
         self.result_df = None
@@ -65,6 +125,8 @@ class Metrics:
         labels = labels.tolist()
 
         for pred, true in zip(predictions, labels):
+            if true == -100:
+                continue
             self.confusion_matrix[true][pred] += 1
     def reset(self):
         self.confusion_matrix = [[0 for _ in range(self.num_classes)] 
@@ -204,11 +266,12 @@ class EarlyStop():
                 self.best_score = acc
                 
                 self.save_checkpoint(model, optimizer, scheduler, epoch,acc,True)
+                return 
             
 
             if acc-self.best_score  < self.delta:
                 self.counter += 1
-                self.save_checkpoint(model, optimizer, scheduler, epoch,acc,False)
+                # self.save_checkpoint(model, optimizer, scheduler, epoch,acc,False)
                 if self.counter > self.patience:
                     self.early_stop = True
             else:
@@ -219,9 +282,10 @@ class EarlyStop():
             if self.best_score is None:
                 self.best_score = loss
                 self.save_checkpoint(model, optimizer, scheduler, epoch,loss,True)
+                return
             if self.best_score - loss  < self.delta:
                 self.counter += 1
-                self.save_checkpoint(model, optimizer, scheduler, epoch,loss,False)
+                # self.save_checkpoint(model, optimizer, scheduler, epoch,loss,False)
                 if self.counter > self.patience:
                     self.early_stop = True
             else:
@@ -235,6 +299,8 @@ class EarlyStop():
         checkpoint_path = os.path.join(self.save_dir, checkpoint_name)
         checkpoint = {
             'epoch': epoch,
+            'label2id': label2id,
+            'id2label': id2label,
             'model': model.state_dict(),
             'optimizer': optimizer.state_dict(),
             'scheduler': scheduler.state_dict(),
@@ -247,6 +313,7 @@ class EarlyStop():
 class Arguments:
     def __init__(self, config_path="arguments.json"):
         self.args_dict = self._load_json_config(config_path)
+        self.class_num=None
         for key, value in self.args_dict.items():
             setattr(self, key, value)
         
@@ -256,34 +323,20 @@ class Arguments:
                 return json.load(f)
         return {}
     def get_args_dict(self):
-        return self.args_dict           
-    
+        return self.args_dict
+    def set_class_num(self,class_num):
+        self.class_num=class_num
+        self.args_dict['class_num']=class_num
         
 
 if __name__ == '__main__': 
-    args = Arguments("arguments.json")
-    train_dataLoader, dev_dataLoader, test_dataLoader = load_data(args)
-    true_labels = [0, 0, 1, 1, 1, 2, 2, 2, 2, 0]
-    pred_labels = [0, 1, 1, 1, 2, 2, 2, 0, 2, 0]
-    metrics = Metrics(num_classes=3)
-   
-    metrics.add(torch.tensor(pred_labels), torch.tensor(true_labels))
-    print(metrics.get_results()) 
-    print(metrics.get_result_dict())
-    for batch in train_dataLoader:
-        print(batch)
+    args = Arguments("args/arg1.json")
+
+    train_dataloader, dev_dataloader, test_dataloader = load_data(args)
+    print(args.get_args_dict())
+    for input_ids, attention_mask, targets in train_dataloader:
+        print(input_ids[0])
+        print(targets[0])
         break
-    
         
-        
-
-
-        
-    
-    
-
-
-
-
-
-
+   
