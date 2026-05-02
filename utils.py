@@ -260,7 +260,7 @@ class EarlyStop():
         self.early_stop = False
         self.save_dir = save_dir
         
-    def __call__(self, epoch,loss,acc, model,optimizer,scheduler,):
+    def __call__(self, epoch,loss,acc,f1_score, model,optimizer,scheduler,):
         if self.monitor == 'val_acc':
             if self.best_score is None :
                 self.best_score = acc
@@ -292,6 +292,23 @@ class EarlyStop():
                 self.best_score = loss
                 self.counter = 0
                 self.save_checkpoint(model, optimizer, scheduler, epoch,loss,True)
+        if self.monitor == 'val_f1':
+            if self.best_score is None :
+                self.best_score = f1_score
+                
+                self.save_checkpoint(model, optimizer, scheduler, epoch,acc,True)
+                return 
+            
+
+            if f1_score-self.best_score  < self.delta:
+                self.counter += 1
+                # self.save_checkpoint(model, optimizer, scheduler, epoch,acc,False)
+                if self.counter > self.patience:
+                    self.early_stop = True
+            else:
+                self.best_score = f1_score
+                self.counter = 0
+                self.save_checkpoint(model, optimizer, scheduler, epoch,f1_score,True)
         return self.early_stop
         
     def save_checkpoint(self, model, optimizer, scheduler, epoch, dev_metrics,is_best):
