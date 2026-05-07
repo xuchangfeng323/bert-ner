@@ -75,11 +75,11 @@ pip install -r requirements.txt
 {
     "num_epochs": 100,        // 最大训练轮数
     "batch_size": 16,         // 批次大小
-    "lr": 3e-5,              // 学习率
+    "lr": 2e-5,              // 学习率
     "weight_decay": 0.01,    // 权重衰减
     "device": "cuda:0",      // 训练设备
     "model_dir": "../bert-base-chinese",  // BERT 模型路径
-    "dropout_rate": 0.6,     // Dropout 比例
+    "dropout_rate": 0.3,     // Dropout 比例
     "embedding_dim": 768,    // BERT 隐藏层维度
     "data_path": "./data/",  // 数据路径
     "max_length": 128,       // 最大序列长度
