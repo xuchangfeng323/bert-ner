@@ -4,7 +4,7 @@ import swanlab
 from tqdm import tqdm
 import torch
 from model import Bert4NER
-
+import argparse
 from utils import load_data
 import torch.nn as nn
 from utils import get_next,write_log,Arguments,Metrics
@@ -73,12 +73,14 @@ class Trainer:
                 "train/loss": avg_train_loss,
                 "eval/loss": avg_eval_loss,
                 "eval/accuracy": eval_accuracy,
+                "eval/f1": results_dict['macro_avg']['f1_score'],
                 "eval/results": results_dict
             }
+            f1=results_dict['macro_avg']['f1_score']
             write_log(self.log_dir, log_dict)
             if self.scheduler is not None:
                 self.scheduler.step(avg_eval_loss)
-            if self.early_stop(epoch,avg_eval_loss,eval_accuracy, model,optimizer,scheduler):
+            if self.early_stop(epoch,avg_eval_loss,eval_accuracy,f1, model,optimizer,scheduler):
                 break
 
         self.test(testdataLoader)
@@ -115,10 +117,11 @@ class Trainer:
         eval_accuracy = eval_correct / total_samples  
         print(f"Eval Accuracy: {eval_accuracy:.4f}")
         print(f"Eval Loss: {avg_eval_loss:.4f}")
+        print(f"Eval F1 Score: {results_dict['macro_avg']['f1_score']:.4f}")
         swanlab.log({
             "eval/loss": avg_eval_loss,
             "eval/accuracy": eval_accuracy,
-            
+            "eval/f1": results_dict['macro_avg']['f1_score'],
             
         })
 
@@ -164,16 +167,14 @@ class Trainer:
         })
         print(results_dict)
 if __name__ == "__main__":
-    args=Arguments("./args/arg1.json")
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--arg', type=str, default='./args/arg1.json')
+    args = parser.parse_args()
+    args=Arguments(args.arg)
     traindataLoader, devdataLoader, testdataLoader = load_data(args)
     model=Bert4NER(args)
     optimizer, scheduler = model.get_optimizer()
     trainer=Trainer(args)
     trainer.train(traindataLoader, devdataLoader, testdataLoader, model, optimizer, scheduler)
-
-        
-        
-        
-        
-        
+   
         

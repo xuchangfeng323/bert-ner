@@ -3,14 +3,14 @@ import pandas as pd
 from transformers import BertTokenizerFast
 from MyDataset import ToutiaoDataset
 import torch
-from sklearn.model_selection import train_test_split
+
 import json
 import numpy as np
 label2id, id2label=None, None
 def get_next(prefix_dir):
     if not os.path.exists(prefix_dir):
-        os.makedirs(prefix_dir+'exp1')
-        return prefix_dir+'exp1'
+        os.makedirs(prefix_dir+'/exp1')
+        return prefix_dir+'/exp1'
     else:
         existing_nums = []
         for file in os.listdir(prefix_dir):
@@ -271,7 +271,7 @@ class EarlyStop():
 
             if acc-self.best_score  < self.delta:
                 self.counter += 1
-                # self.save_checkpoint(model, optimizer, scheduler, epoch,acc,False)
+                self.save_checkpoint(model, optimizer, scheduler, epoch,acc,False)
                 if self.counter > self.patience:
                     self.early_stop = True
             else:
@@ -285,7 +285,7 @@ class EarlyStop():
                 return
             if self.best_score - loss  < self.delta:
                 self.counter += 1
-                # self.save_checkpoint(model, optimizer, scheduler, epoch,loss,False)
+                self.save_checkpoint(model, optimizer, scheduler, epoch,loss,False)
                 if self.counter > self.patience:
                     self.early_stop = True
             else:
@@ -296,13 +296,13 @@ class EarlyStop():
             if self.best_score is None :
                 self.best_score = f1_score
                 
-                self.save_checkpoint(model, optimizer, scheduler, epoch,acc,True)
+                self.save_checkpoint(model, optimizer, scheduler, epoch,f1_score,True)
                 return 
             
 
             if f1_score-self.best_score  < self.delta:
                 self.counter += 1
-                # self.save_checkpoint(model, optimizer, scheduler, epoch,acc,False)
+                self.save_checkpoint(model, optimizer, scheduler, epoch,f1_score,False)
                 if self.counter > self.patience:
                     self.early_stop = True
             else:
@@ -355,5 +355,6 @@ if __name__ == '__main__':
         print(input_ids[0])
         print(targets[0])
         break
+    
         
    
