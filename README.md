@@ -148,4 +148,4 @@ python trainer.py --arg ./args/arg1.json
 | **I-PER.NOM** (人名-普通) | 0.7222 | 0.8204 | 0.7682 | 206 |
 | **O** (非实体) | 0.9871 | 0.9875 | 0.9873 | 13,485 |
 #### 训练过程
-![alt text](reademe/image.png)
+![alt text](readme/image.png)
