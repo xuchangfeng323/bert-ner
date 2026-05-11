@@ -1,12 +1,12 @@
 import os
 import pandas as pd
 from transformers import BertTokenizerFast
-from MyDataset import ToutiaoDataset
+from MyDataset import WeiboNerDataset
 import torch
 
 import json
 import numpy as np
-label2id, id2label=None, None
+global label2id, id2label
 def get_next(prefix_dir):
     if not os.path.exists(prefix_dir):
         os.makedirs(prefix_dir+'/exp1')
@@ -44,7 +44,7 @@ def get_sentences(dir_path):
     sentence = []
     tag = []
     sentences_list = []
-    tags_list = []
+    tags_list = []  
     for line in open(dir_path,encoding='utf-8'):
         if line[0] == '\n':
             
@@ -61,47 +61,17 @@ def get_sentences(dir_path):
             tag.append(parts[1])
     return {'sentences':sentences_list,'tags':tags_list}
 
-        
-
-        
-    
 def load_data(config):
     data_dir=config.data_path
-    headers=[
-    "id",
-    "label",
-    "channel",
-    "title",
-    "keywords"
-]
     train_data = get_sentences(os.path.join(data_dir, 'train.txt'))
     test_data = get_sentences(os.path.join(data_dir, 'test.txt'))
     dev_data = get_sentences(os.path.join(data_dir, 'dev.txt'))
-    label2id, id2label = build_label_mappings(train_data['tags'], save_path=os.path.join(data_dir, 'label2id.json'))
+    label2id, id2label = build_label_mappings(train_data['tags']+test_data['tags']+dev_data['tags'], save_path=os.path.join(data_dir, 'label2id.json'))
     config.set_class_num(len(label2id))
-    known_labels = set(label2id.keys())
-    tags_list = {
-        "train": train_data["tags"],
-        "dev": dev_data["tags"],
-        "test": test_data["tags"]
-    }
-    for name, tags_list in tags_list.items():
-        unknown_labels = set()
-        for i in range(len(tags_list)):
-            for j in range(len(tags_list[i])):
-                if tags_list[i][j] not in known_labels:
-                    unknown_labels.add(tags_list[i][j])
-                else:
-                    tags_list[i][j] = label2id[tags_list[i][j]]
-        
-        if unknown_labels:
-            raise ValueError(
-                f"{name} 集中存在训练集 label2id 未覆盖的标签: {sorted(unknown_labels)}"
-            )
     tokenizer = BertTokenizerFast.from_pretrained(config.model_dir)
-    train_dataset = ToutiaoDataset(train_data,tokenizer,config.max_length)
-    test_dataset = ToutiaoDataset(test_data,tokenizer,config.max_length)
-    dev_dataset = ToutiaoDataset(dev_data,tokenizer,config.max_length)
+    train_dataset = WeiboNerDataset(train_data, tokenizer, config.max_length, label2id, config.align_type)
+    test_dataset = WeiboNerDataset(test_data, tokenizer, config.max_length, label2id, config.align_type)
+    dev_dataset = WeiboNerDataset(dev_data, tokenizer, config.max_length, label2id, config.align_type)
 
     train_dataLoader = train_dataset.get_data_loader(batch_size=config.batch_size)
     dev_dataLoader = dev_dataset.get_data_loader(batch_size=config.batch_size,shuffle=False)
@@ -348,13 +318,7 @@ class Arguments:
 
 if __name__ == '__main__': 
     args = Arguments("args/arg1.json")
-
     train_dataloader, dev_dataloader, test_dataloader = load_data(args)
-    print(args.get_args_dict())
-    for input_ids, attention_mask, targets in train_dataloader:
-        print(input_ids[0])
-        print(targets[0])
-        break
     
         
    
