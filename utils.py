@@ -67,7 +67,7 @@ def load_data(config):
     test_data = get_sentences(os.path.join(data_dir, 'test.txt'))
     dev_data = get_sentences(os.path.join(data_dir, 'dev.txt'))
     label2id, id2label = build_label_mappings(train_data['tags']+test_data['tags']+dev_data['tags'], save_path=os.path.join(data_dir, 'label2id.json'))
-    config.set_class_num(len(label2id))
+    config.set_mapping(label2id,id2label)
     tokenizer = BertTokenizerFast.from_pretrained(config.model_dir)
     train_dataset = WeiboNerDataset(train_data, tokenizer, config.max_length, label2id, config.align_type)
     test_dataset = WeiboNerDataset(test_data, tokenizer, config.max_length, label2id, config.align_type)
@@ -76,149 +76,200 @@ def load_data(config):
     train_dataLoader = train_dataset.get_data_loader(batch_size=config.batch_size)
     dev_dataLoader = dev_dataset.get_data_loader(batch_size=config.batch_size,shuffle=False)
     test_dataLoader = test_dataset.get_data_loader(batch_size=config.batch_size,shuffle=False)
-    return train_dataLoader, dev_dataLoader, test_dataLoader
+    return train_dataLoader, dev_dataLoader, test_dataLoader,label2id,id2label
 
 def write_log(log_jsonl_path, log_dict):
 
     with open(log_jsonl_path, "a", encoding="utf-8") as f:
         f.write(json.dumps(log_dict, ensure_ascii=False) + "\n")
 class Metrics:
-    def __init__(self, num_classes):
-        self.num_classes = num_classes
-        print(f"num_classes: {num_classes}")
-        self.confusion_matrix = [[0 for _ in range(self.num_classes)] 
-                                  for _ in range(self.num_classes)]
-        self.result_df = None
+    def __init__(self,label2id,id2label):
+        self.id2label = id2label
+        self.label2id = label2id
+        self.entity_types = set()
+        for idx, label in id2label.items():
+            if label.startswith('B-'):
+                self.entity_types.add(label[2:])  
+        self.entity_types = sorted(self.entity_types)
+        self.all_true_entities = []
+        self.all_pred_entities = []
+        self._counts = None
         
     def add(self, predictions, labels):    
         predictions = predictions.tolist()
         labels = labels.tolist()
+        pred_str = [self.id2label.get(p, 'O') for p in predictions if p != -100]
+        true_str = [self.id2label.get(l, 'O') for l in labels if l != -100]
+        self.all_true_entities.extend(self._extract_entities(true_str))
+        self.all_pred_entities.extend(self._extract_entities(pred_str))
+    def _extract_entities(self, tags):
+        entities =[]
+        i=0
+        while i<len(tags):
+            if tags[i].startswith('B-'):
+                entity_type = tags[i][2:]
+                start=i
+                i+=1
+                while i<len(tags) and tags[i]=='I-'+entity_type:
+                    i+=1
+                end=i
+                entities.append((entity_type,start,end))
+            else:
+                i+=1
+        return entities
 
-        for pred, true in zip(predictions, labels):
-            if true == -100:
-                continue
-            self.confusion_matrix[true][pred] += 1
+
     def reset(self):
-        self.confusion_matrix = [[0 for _ in range(self.num_classes)] 
-                                  for _ in range(self.num_classes)]
+        self.all_true_entities = []
+        self.all_pred_entities = []
+        self._counts = None
+        self.confusion_matrix = [[0 for _ in range(len(self.entity_types))] 
+                                  for _ in range(len(self.entity_types))]
         self.result_df = None
     
-    def calculate_tp_fp_fn(self, class_id): 
-        tp = self.confusion_matrix[class_id][class_id]
-        fp = sum(self.confusion_matrix[i][class_id] for i in range(self.num_classes)) - tp
-        fn = sum(self.confusion_matrix[class_id]) - tp
-        return tp, fp, fn
+    def _compute_counts(self):
+        true_list = self.all_true_entities   
+        pred_list = self.all_pred_entities
+        counts = {etype: {'tp': 0, 'fp': 0, 'fn': 0} for etype in self.entity_types}
+        matched_true = [False] * len(true_list)
+        matched_pred = [False] * len(pred_list)
+        for i, etype in enumerate(true_list):
+            if matched_true[i]:
+                continue
+            true_type,true_start, true_end = etype[0],etype[1], etype[2]
+            for j, etype_j in enumerate(pred_list):
+                if matched_pred[j]:
+                    continue
+                pre_type,pre_strat,pre_end=etype_j[0],etype_j[1], etype_j[2]
+                if etype_j == etype:
+                    counts[etype[0]]['tp'] += 1
+                    matched_true[i] = True
+                    matched_pred[j] = True
+                    break
+        for i, true_ent in enumerate(true_list):
+            if not matched_true[i]:
+                etype = true_ent[0]
+                counts[etype]['fn'] += 1
+        for i, pred_ent in enumerate(pred_list):
+            if not matched_pred[i]:
+                
+                counts[pred_ent[0]]['fp'] += 1
+        self._counts = counts
+        return counts
+    def precision(self, entity_type=None):
+       
+        if self._counts is None:
+            self._compute_counts()
+        counts = self._counts
+        if entity_type is not None:
+            if entity_type not in counts:
+                return 0.0
+            tp = counts[entity_type]['tp']
+            fp = counts[entity_type]['fp']
+            return tp / (tp + fp) if (tp + fp) > 0 else 0.0
+        else:
+            # 宏观平均（所有类别未加权平均）
+            if not counts:
+                return 0.0
+            total_prec = sum(self.precision(et) for et in self.entity_types)
+            return total_prec / len(self.entity_types)
+    def recall(self, entity_type=None):
+        
+        if self._counts is None:
+            self._compute_counts()
+        counts = self._counts
+        if entity_type is not None:
+            if entity_type not in counts:
+                return 0.0
+            tp = counts[entity_type]['tp']
+            fn = counts[entity_type]['fn']
+            return tp / (tp + fn) if (tp + fn) > 0 else 0.0
+        else:
+            if not counts:
+                return 0.0
+            total_rec = sum(self.recall(et) for et in self.entity_types)
+            return total_rec / len(self.entity_types)
     
-    def precision(self, class_id=None):
-        if class_id is not None:
-            tp, fp, _ = self.calculate_tp_fp_fn(class_id)
-            if tp + fp == 0:
-                return 0.0
-            return tp / (tp + fp)
-        else :
-            total_tp,total_fp,total_fn = 0,0,0
-            for i in range(self.num_classes):
-                tp, fp, fn = self.calculate_tp_fp_fn(i)
-                total_tp += tp
-                total_fp += fp
-                total_fn += fn
-            if total_tp + total_fp == 0:
-                return 0.0
-            return total_tp /(total_tp + total_fp)
+    def f1_score(self, entity_type=None):
+        if entity_type is not None:
+            p = self.precision(entity_type)
+            r = self.recall(entity_type)
+            return 2 * p * r / (p + r) if (p + r) > 0 else 0.0
+        else:
+    
+            p = self.precision()
+            r = self.recall()
+            return 2 * p * r / (p + r) if (p + r) > 0 else 0.0
+    def get_results(self):
+       
+        counts = self._compute_counts()
+        
+        p_list = []
+        r_list = []
+        f1_list = []
+        support_list = []   # 真实实体数量（FN+TP）
+        
+        for etype in self.entity_types:
+            p = self.precision(etype)
+            r = self.recall(etype)
+            f1 = self.f1_score(etype)
+            support = counts[etype]['tp'] + counts[etype]['fn']
+            p_list.append(p)
+            r_list.append(r)
+            f1_list.append(f1)
+            support_list.append(support)
+        
+       
+        df = pd.DataFrame({
+            'precision': p_list,
+            'recall': r_list,
+            'f1_score': f1_list,
+            'support': support_list
+        }, index=self.entity_types)
+        
+       
+        df.loc['macro_avg'] = df[['precision', 'recall', 'f1_score']].mean()
+        df.loc['macro_avg', 'support'] = float('nan')
+        
+        
+        total_tp = sum(v['tp'] for v in counts.values())
+        total_fp = sum(v['fp'] for v in counts.values())
+        total_fn = sum(v['fn'] for v in counts.values())
+        micro_p = total_tp / (total_tp + total_fp) if (total_tp + total_fp) > 0 else 0.0
+        micro_r = total_tp / (total_tp + total_fn) if (total_tp + total_fn) > 0 else 0.0
+        micro_f1 = 2 * micro_p * micro_r / (micro_p + micro_r) if (micro_p + micro_r) > 0 else 0.0
+        df.loc['micro_avg'] = [micro_p, micro_r, micro_f1, float('nan')]
+        
+        self.result_df = df
+        return df
+    
     def get_result_dict(self):
-        df = self.result_df
+        
+        if not hasattr(self, 'result_df'):
+            df = self.get_results()
+        else:
+            df = self.result_df
+        
         result = {}
-
         for idx in df.index:
-            if isinstance(idx, int):
-                key = f"class_{idx}"
+           
+            if isinstance(idx, int) or isinstance(idx, str):
+                key = str(idx)
             else:
-                key = str(idx)  
-            
+                key = idx   
             row = df.loc[idx]
             row_dict = {}
             for col in df.columns:
                 val = row[col]
-               
                 if pd.isna(val):
                     row_dict[col] = None
-                
                 elif isinstance(val, (np.integer, np.floating)):
                     row_dict[col] = val.item()
                 else:
                     row_dict[col] = val
             result[key] = row_dict
-
         return result
 
-    
-    def recall(self, class_id=None):
-       
-        if class_id is not None:
-            tp, fp, fn = self.calculate_tp_fp_fn(class_id)
-            if tp + fn == 0:
-                return 0.0
-            return tp / (tp + fn)
-        else:
-            total_tp,total_fp,total_fn = 0,0,0
-            for i in range(self.num_classes):
-                tp, fp, fn = self.calculate_tp_fp_fn(i)
-                total_tp += tp
-                total_fp += fp
-                total_fn += fn
-            if total_tp + total_fn == 0:
-                return 0.0
-            return total_tp /(total_tp + total_fn)
-    
-    def f1_score(self, class_id=None):
-       
-        if class_id is not None:
-            p = self.precision(class_id)
-            r = self.recall(class_id)
-            if p + r == 0:
-                return 0.0
-            return 2 * p * r / (p + r)
-        
-        else:
-            total_tp,total_fp,total_fn = 0,0,0
-            for i in range(self.num_classes):
-                tp, fp, fn = self.calculate_tp_fp_fn(i)
-                total_tp += tp
-                total_fp += fp
-                total_fn += fn
-            if total_tp + total_fn == 0:
-                r = 0.0
-            else:
-                r = total_tp /(total_tp + total_fn)
-            if total_tp + total_fp == 0:
-                p = 0.0
-            else:
-                p = total_tp /(total_tp + total_fp)
-            if p + r == 0:
-                return 0.0
-            return 2 * p * r / (p + r)
-    def get_results(self):
-        p_list=[]
-        r_list=[]
-        f1_list=[]
-        support_list = []
-
-        for i in range(self.num_classes):
-            p_list.append(self.precision(i))
-            r_list.append(self.recall(i))
-            f1_list.append(self.f1_score(i))
-            support=sum(self.confusion_matrix[i])
-            support_list.append(support)
-        micro_p = self.precision()      
-        micro_r = self.recall()         
-        micro_f1 = self.f1_score() 
-        df=pd.DataFrame({'precision':p_list,'recall':r_list,'f1_score':f1_list,'support':support_list})
-        df.loc['macro_avg'] = df[['precision', 'recall', 'f1_score']].mean()
-        df.loc['macro_avg', 'support'] = float('nan')
-        df.loc['micro_avg'] = [micro_p,micro_r,micro_f1,float('nan')]
-        
-        self.result_df = df
-        return df
 class EarlyStop():
     def __init__(self,config,save_dir=None):
         self.config=config
@@ -231,6 +282,10 @@ class EarlyStop():
         self.save_dir = save_dir
         
     def __call__(self, epoch,loss,acc,f1_score, model,optimizer,scheduler,):
+        if epoch==self.config.num_epochs-1:
+            self.save_checkpoint(model, optimizer, scheduler, epoch,acc,False)
+            return
+
         if self.monitor == 'val_acc':
             if self.best_score is None :
                 self.best_score = acc
@@ -241,7 +296,7 @@ class EarlyStop():
 
             if acc-self.best_score  < self.delta:
                 self.counter += 1
-                self.save_checkpoint(model, optimizer, scheduler, epoch,acc,False)
+                
                 if self.counter > self.patience:
                     self.early_stop = True
             else:
@@ -255,7 +310,7 @@ class EarlyStop():
                 return
             if self.best_score - loss  < self.delta:
                 self.counter += 1
-                self.save_checkpoint(model, optimizer, scheduler, epoch,loss,False)
+                
                 if self.counter > self.patience:
                     self.early_stop = True
             else:
@@ -272,7 +327,7 @@ class EarlyStop():
 
             if f1_score-self.best_score  < self.delta:
                 self.counter += 1
-                self.save_checkpoint(model, optimizer, scheduler, epoch,f1_score,False)
+                
                 if self.counter > self.patience:
                     self.early_stop = True
             else:
@@ -286,8 +341,8 @@ class EarlyStop():
         checkpoint_path = os.path.join(self.save_dir, checkpoint_name)
         checkpoint = {
             'epoch': epoch,
-            'label2id': label2id,
-            'id2label': id2label,
+            'label2id': self.config.label2id,
+            'id2label': self.config.id2label,
             'model': model.state_dict(),
             'optimizer': optimizer.state_dict(),
             'scheduler': scheduler.state_dict(),
@@ -301,6 +356,8 @@ class Arguments:
     def __init__(self, config_path="arguments.json"):
         self.args_dict = self._load_json_config(config_path)
         self.class_num=None
+        self.label2id=None
+        self.id2label=None
         for key, value in self.args_dict.items():
             setattr(self, key, value)
         
@@ -311,14 +368,45 @@ class Arguments:
         return {}
     def get_args_dict(self):
         return self.args_dict
-    def set_class_num(self,class_num):
-        self.class_num=class_num
-        self.args_dict['class_num']=class_num
+    def set_mapping(self,label2id,id2label):
+        self.label2id=label2id
+        self.id2label=id2label
+        self.class_num=len(label2id)
+        self.args_dict['class_num']=self.class_num
+        self.args_dict['label2id']=label2id
+        self.args_dict['id2label']=id2label
         
 
 if __name__ == '__main__': 
     args = Arguments("args/arg1.json")
-    train_dataloader, dev_dataloader, test_dataloader = load_data(args)
+    train_dataloader, dev_dataloader, test_dataloader ,label2id,id2label = load_data(args)
+    true_labels_1 = [1, 2, 0, 3, 4]      
+    pred_labels_1 = [1, 2, 0, 0, 0]     
+    metrics = Metrics(label2id,id2label)
+    
+    true_labels_2 = [0, 0, 0, 0, 0]      
+    pred_labels_2 = [1, 2, 0, 0, 0]      
+
+    # 转为 tensor（模拟模型输出）
+    labels1 = torch.tensor(true_labels_1)
+    preds1 = torch.tensor(pred_labels_1)
+
+    labels2 = torch.tensor(true_labels_2)
+    preds2 = torch.tensor(pred_labels_2)
+
+    # 添加到 metrics
+    metrics.add(preds1, labels1)
+    metrics.add(preds2, labels2)
+
+    # 获取结果
+    df = metrics.get_results()
+    print("=== 详细结果 ===")
+    print(df.round(4))
+
+    print("\n=== 结果字典 ===")
+    result_dict = metrics.get_result_dict()
+    for key, val in result_dict.items():
+        print(f"{key}: {val}")
     
         
    

@@ -9,7 +9,6 @@ from utils import load_data
 import torch.nn as nn
 from utils import get_next,write_log,Arguments,Metrics
 import os
-
 class Trainer:
     def __init__(self,config):
         self.optimizer=None
@@ -19,7 +18,7 @@ class Trainer:
         self.config=config
         self.loss_fn = nn.CrossEntropyLoss()
         print(config.get_args_dict())
-        self.metrics = Metrics(num_classes=config.class_num)
+        self.metrics = Metrics(config.label2id,config.id2label)
         self.best_accuracy = 0.0
         self.save_dir = get_next(config.save_dir)
         self.early_stop = EarlyStop(config, self.save_dir)
@@ -73,10 +72,10 @@ class Trainer:
                 "train/loss": avg_train_loss,
                 "eval/loss": avg_eval_loss,
                 "eval/accuracy": eval_accuracy,
-                "eval/f1": results_dict['macro_avg']['f1_score'],
+                "eval/f1": results_dict['micro_avg']['f1_score'],
                 "eval/results": results_dict
             }
-            f1=results_dict['macro_avg']['f1_score']
+            f1=results_dict['micro_avg']['f1_score']
             write_log(self.log_dir, log_dict)
             if self.scheduler is not None:
                 self.scheduler.step(avg_eval_loss)
@@ -117,11 +116,11 @@ class Trainer:
         eval_accuracy = eval_correct / total_samples  
         print(f"Eval Accuracy: {eval_accuracy:.4f}")
         print(f"Eval Loss: {avg_eval_loss:.4f}")
-        print(f"Eval F1 Score: {results_dict['macro_avg']['f1_score']:.4f}")
+        print(f"Eval F1 Score: {results_dict['micro_avg']['f1_score']:.4f}")
         swanlab.log({
             "eval/loss": avg_eval_loss,
             "eval/accuracy": eval_accuracy,
-            "eval/f1": results_dict['macro_avg']['f1_score'],
+            "eval/f1": results_dict['micro_avg']['f1_score'],
             
         })
 
@@ -171,7 +170,8 @@ if __name__ == "__main__":
     parser.add_argument('--arg', type=str, default='./args/arg1.json')
     args = parser.parse_args()
     args=Arguments(args.arg)
-    traindataLoader, devdataLoader, testdataLoader = load_data(args)
+    traindataLoader, devdataLoader, testdataLoader,label2id,id2label = load_data(args)
+    args.set_mapping(label2id,id2label)
     model=Bert4NER(args)
     optimizer, scheduler = model.get_optimizer()
     trainer=Trainer(args)
