@@ -98,10 +98,12 @@ class Metrics:
     def add(self, predictions, labels):    
         predictions = predictions.tolist()
         labels = labels.tolist()
-        pred_str = [self.id2label.get(p, 'O') for p in predictions if p != -100]
-        true_str = [self.id2label.get(l, 'O') for l in labels if l != -100]
-        self.all_true_entities.extend(self._extract_entities(true_str))
-        self.all_pred_entities.extend(self._extract_entities(pred_str))
+        for pred_seq, label_seq in zip(predictions, labels):
+        
+            pred_str = [self.id2label.get(p, 'O') if p != -100 else 'O' for p in pred_seq]
+            true_str = [self.id2label.get(l, 'O') if l != -100 else 'O' for l in label_seq]
+            self.all_true_entities.extend(self._extract_entities(true_str))
+            self.all_pred_entities.extend(self._extract_entities(pred_str))
     def _extract_entities(self, tags):
         entities =[]
         i=0
@@ -280,11 +282,10 @@ class EarlyStop():
         self.patience = config.patience
         self.early_stop = False
         self.save_dir = save_dir
+        self.best_model_path=None
         
     def __call__(self, epoch,loss,acc,f1_score, model,optimizer,scheduler,):
-        if epoch==self.config.num_epochs-1:
-            self.save_checkpoint(model, optimizer, scheduler, epoch,acc,False)
-            return
+        
 
         if self.monitor == 'val_acc':
             if self.best_score is None :
@@ -320,7 +321,6 @@ class EarlyStop():
         if self.monitor == 'val_f1':
             if self.best_score is None :
                 self.best_score = f1_score
-                
                 self.save_checkpoint(model, optimizer, scheduler, epoch,f1_score,True)
                 return 
             
@@ -334,6 +334,9 @@ class EarlyStop():
                 self.best_score = f1_score
                 self.counter = 0
                 self.save_checkpoint(model, optimizer, scheduler, epoch,f1_score,True)
+        if epoch==self.config.num_epochs-1:
+            self.save_checkpoint(model, optimizer, scheduler, epoch,acc,False)
+            return
         return self.early_stop
         
     def save_checkpoint(self, model, optimizer, scheduler, epoch, dev_metrics,is_best):
@@ -347,6 +350,8 @@ class EarlyStop():
             'optimizer': optimizer.state_dict(),
             'scheduler': scheduler.state_dict(),
         }
+        if is_best and self.best_model_path is not None:
+            os.remove(self.best_model_path)
         torch.save(checkpoint, checkpoint_path)
         print(f"保存 epoch {epoch + 1} 的 checkpoint: {checkpoint_path}")
         if is_best:
@@ -377,36 +382,3 @@ class Arguments:
         self.args_dict['id2label']=id2label
         
 
-if __name__ == '__main__': 
-    args = Arguments("args/arg1.json")
-    train_dataloader, dev_dataloader, test_dataloader ,label2id,id2label = load_data(args)
-    true_labels_1 = [1, 2, 0, 3, 4]      
-    pred_labels_1 = [1, 2, 0, 0, 0]     
-    metrics = Metrics(label2id,id2label)
-    
-    true_labels_2 = [0, 0, 0, 0, 0]      
-    pred_labels_2 = [1, 2, 0, 0, 0]      
-
-    # 转为 tensor（模拟模型输出）
-    labels1 = torch.tensor(true_labels_1)
-    preds1 = torch.tensor(pred_labels_1)
-
-    labels2 = torch.tensor(true_labels_2)
-    preds2 = torch.tensor(pred_labels_2)
-
-    # 添加到 metrics
-    metrics.add(preds1, labels1)
-    metrics.add(preds2, labels2)
-
-    # 获取结果
-    df = metrics.get_results()
-    print("=== 详细结果 ===")
-    print(df.round(4))
-
-    print("\n=== 结果字典 ===")
-    result_dict = metrics.get_result_dict()
-    for key, val in result_dict.items():
-        print(f"{key}: {val}")
-    
-        
-   

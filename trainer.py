@@ -49,10 +49,10 @@ class Trainer:
                 self.optimizer.zero_grad()
                 input_ids = input_ids.to(self.device)
                 attention_mask = attention_mask.to(self.device)
-                labels=labels.view(-1)
+                
                 labels = labels.to(self.device)
                 logits = self.model(input_ids, attention_mask)
-                loss=self.loss_fn(logits, labels)
+                loss=self.loss_fn(logits.view(-1, logits.size(-1)), labels.view(-1))
                 loss.backward()
                 self.optimizer.step()
                 total_train_loss += loss.item()
@@ -66,12 +66,12 @@ class Trainer:
             swanlab.log({
                 "train/loss_epoch": avg_train_loss
             }, step=epoch)
-            avg_eval_loss ,eval_accuracy,results_dict = self.eval(epoch, devdataLoader)
+            avg_eval_loss,eval_accuracy,results_dict = self.eval(epoch, devdataLoader)
             log_dict = {
                 "epoch": epoch + 1,
                 "train/loss": avg_train_loss,
                 "eval/loss": avg_eval_loss,
-                "eval/accuracy": eval_accuracy,
+                
                 "eval/f1": results_dict['micro_avg']['f1_score'],
                 "eval/results": results_dict
             }
@@ -91,35 +91,36 @@ class Trainer:
         self.model.eval()
         
         total_eval_loss = 0
-        eval_correct = 0
         total_samples = 0
+        correct_samples = 0
         progress_bar = tqdm(devdataLoader, desc="Evaluation", position=0, leave=True)
         with torch.no_grad():
             for input_ids, attention_mask, labels in progress_bar:
                 input_ids = input_ids.to(self.device)
                 attention_mask = attention_mask.to(self.device)
-                labels=labels.view(-1)
+                
                 labels = labels.to(self.device)
                 logits = self.model(input_ids, attention_mask)
                 loss_fn = self.loss_fn
-                loss = loss_fn(logits, labels)
+                loss = loss_fn(logits.view(-1, logits.size(-1)), labels.view(-1))
                 total_eval_loss += loss.item()
                 predictions = torch.argmax(logits, dim=-1)
-                eval_correct += (predictions == labels).sum().item()
-                total_samples += labels.size(0)
+                total_samples += labels.view(-1).size(0)
+                correct_samples += (predictions.view(-1) == labels.view(-1)).sum().item()
+                
                 self.metrics.add(predictions, labels)
         results = self.metrics.get_results()
         print(results)
         results_dict = self.metrics.get_result_dict()
         self.metrics.reset()
+        eval_accuracy=correct_samples/total_samples
         avg_eval_loss = total_eval_loss / len(devdataLoader)
-        eval_accuracy = eval_correct / total_samples  
-        print(f"Eval Accuracy: {eval_accuracy:.4f}")
         print(f"Eval Loss: {avg_eval_loss:.4f}")
         print(f"Eval F1 Score: {results_dict['micro_avg']['f1_score']:.4f}")
+        print(f"Eval Accuracy: {eval_accuracy:.4f}")
         swanlab.log({
             "eval/loss": avg_eval_loss,
-            "eval/accuracy": eval_accuracy,
+            
             "eval/f1": results_dict['micro_avg']['f1_score'],
             
         })
@@ -132,28 +133,23 @@ class Trainer:
         self.model = self.model.to(self.device)
         self.model.eval()
         total_test_loss = 0
-        test_correct = 0
-        total_samples = 0
+
         progress_bar = tqdm(testdataLoader, desc="Testing", position=0, leave=True)
         with torch.no_grad():
             for  input_ids, attention_mask, labels in progress_bar:
                 input_ids = input_ids.to(self.device)
                 attention_mask = attention_mask.to(self.device)
-                labels=labels.view(-1)
                 labels = labels.to(self.device)
                 logits = self.model(input_ids, attention_mask)
-                loss_fn = self.loss_fn
-                loss = loss_fn(logits, labels)
-                total_test_loss += loss.item()
                 predictions = torch.argmax(logits, dim=-1)
-                test_correct += (predictions == labels).sum().item()
-                total_samples += labels.size(0)
+                
                 self.metrics.add(predictions, labels)
         results = self.metrics.get_results()
         results_dict = self.metrics.get_result_dict()
         avg_test_loss = total_test_loss / len(testdataLoader)
-        test_accuracy = test_correct / total_samples  
-        print(f"Test Accuracy: {test_accuracy:.4f}")
+         
+        
+        print(f"Test F1 Score: {results_dict['micro_avg']['f1_score']:.4f}")
         self.metrics.reset()
         log_dict = {
             "test/results": results_dict
@@ -161,10 +157,10 @@ class Trainer:
         write_log(self.log_dir, {"test": log_dict})
         swanlab.log({
             "test/loss": avg_test_loss,
-            "test/accuracy": test_accuracy,
+            "test/f1": results_dict['micro_avg']['f1_score'],
             
         })
-        print(results_dict)
+        print(results)
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--arg', type=str, default='./args/arg1.json')

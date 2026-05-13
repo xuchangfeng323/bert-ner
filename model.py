@@ -18,7 +18,7 @@ class Bert4NER(nn.Module):
         last_hidden_state = self.dropout(last_hidden_state)
         logits = self.fc(last_hidden_state)
         batch_size,seq_len,class_num=logits.shape
-        logits=logits.view((batch_size*seq_len,class_num))
+        
         return logits
     def get_optimizer(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr, weight_decay=self.weight_decay)

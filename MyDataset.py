@@ -23,24 +23,15 @@ class WeiboNerDataset(Dataset):
             'labels': label
         }
     def collate_fn(self, batch):
-        """
-        将 batch 数据转换为模型输入格式。
         
-        要求每个 batch item 包含:
-            - 'text': List[str] —— 已分词的 token 列表，例如 ['EU', 'rejects', ...]
-            - 'labels': List[str] —— 与 text 等长的 BIO 标签列表，例如 ['B-ORG', 'O', ...]
-        
-        使用 tokenizer 的 word_ids 实现标签对齐。
-        """
-        # 提取文本（必须是 token list，因为 is_split_into_words=True）
         texts = [item['text'] for item in batch]
         labels_list = [item['labels'] for item in batch]
 
-        # Tokenize: 注意 is_split_into_words=True 要求 texts 是 List[List[str]]
+        
         encodings = self.tokenizer(
             texts,
             truncation=True,
-            is_split_into_words=True,   # 关键：告诉 tokenizer 输入已是 tokens
+            is_split_into_words=True,   
             padding='longest',
             max_length=self.max_length,
             return_tensors="pt"
@@ -50,17 +41,17 @@ class WeiboNerDataset(Dataset):
 
         for i, labels in enumerate(labels_list):
             label_ids = []
-            word_ids = encodings.word_ids(batch_index=i)  # e.g., [None, 0, 1, 1, 2, None]
+            word_ids = encodings.word_ids(batch_index=i)  
             previous_word_idx = None
 
             for word_idx in word_ids:
                 if word_idx is None:
-                    # Special tokens ([CLS], [SEP], padding)
+                   
                     label_ids.append(-100)
                 elif word_idx != previous_word_idx:
-                    # Start of a new original word → use its label
+                    
                     if word_idx >= len(labels):
-                        # 防御性处理：越界时默认为 'O'
+                        
                         tag = 'O'
                     else:
                         tag = labels[word_idx]
