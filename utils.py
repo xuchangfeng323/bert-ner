@@ -285,8 +285,6 @@ class EarlyStop():
         self.best_model_path=None
         
     def __call__(self, epoch,loss,acc,f1_score, model,optimizer,scheduler,):
-        
-
         if self.monitor == 'val_acc':
             if self.best_score is None :
                 self.best_score = acc
@@ -300,6 +298,7 @@ class EarlyStop():
                 
                 if self.counter > self.patience:
                     self.early_stop = True
+                    self.save_checkpoint(model, optimizer, scheduler, epoch,acc,False)
             else:
                 self.best_score = acc
                 self.counter = 0
@@ -314,6 +313,7 @@ class EarlyStop():
                 
                 if self.counter > self.patience:
                     self.early_stop = True
+                    self.save_checkpoint(model, optimizer, scheduler, epoch,acc,False)
             else:
                 self.best_score = loss
                 self.counter = 0
@@ -330,6 +330,7 @@ class EarlyStop():
                 
                 if self.counter > self.patience:
                     self.early_stop = True
+                    self.save_checkpoint(model, optimizer, scheduler, epoch,acc,False)
             else:
                 self.best_score = f1_score
                 self.counter = 0
