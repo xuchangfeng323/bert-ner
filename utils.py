@@ -130,15 +130,14 @@ class Metrics:
     def get_results(self):
        
         counts = {etype: {'tp': 0, 'fp': 0, 'fn': 0} for etype in self.entity_types}
-        for true_entity in self.all_true_entities:
-            for ent in self.all_pred_entities:
-                etype=true_entity[1]
-                if etype not in counts:
-                    continue
-                if ent in self.all_pred_entities:
-                    counts[etype]['tp'] += 1
-                elif ent[0] == true_entity[0]:
-                    counts[etype]['fn'] += 1
+        for pred in self.all_pred_entities:
+            etype = pred[1]
+            if etype not in counts:
+                continue
+            if pred in self.all_true_entities:
+                counts[etype]['tp'] += 1
+            else:
+                counts[etype]['fp'] += 1
         for ent in self.all_pred_entities:
             etype=ent[1]
             if etype not in counts:
@@ -154,7 +153,7 @@ class Metrics:
             results.append({'etype':etype,'precision':precision,'recall':recall,'f1':f1,"support":tp+fn})
         df = pd.DataFrame(results,index=self.entity_types)
         if not df.empty:
-            df.loc['macro_avg'] = df[['precision', 'recall', 'f1_score']].mean()
+            df.loc['macro_avg'] = df[['precision', 'recall', 'f1']].mean()
             df.loc['macro_avg', 'support'] = float('nan')
         total_tp = sum(c['tp'] for c in counts.values())
         total_fp = sum(c['fp'] for c in counts.values())
