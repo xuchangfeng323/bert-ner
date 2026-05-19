@@ -41,25 +41,18 @@ def build_label_mappings(labels, save_path=None):
     return label2id, id2label
 
 def get_sentences(dir_path):
-    sentence = []
-    tag = []
-    sentences_list = []
-    tags_list = []  
-    for line in open(dir_path,encoding='utf-8'):
-        if line[0] == '\n':
+    with open(dir_path, encoding='utf-8') as f:
+        blocks = f.read().strip().split('\n\n')
+    
+    sentences_list, tags_list = [], []
+    for block in blocks:
+        pairs = [line.split() for line in block.split('\n') if len(line.split()) == 2]
+        if pairs:
+            words, tags = zip(*pairs)
+            sentences_list.append(list(words))
+            tags_list.append(list(tags))
             
-            sentences_list.append(sentence)
-            tags_list.append(tag)
-            sentence = []
-            tag = []
-            continue
-        else:
-            parts = line.strip().split()
-            if len(parts) != 2:
-                continue
-            sentence.append(parts[0])
-            tag.append(parts[1])
-    return {'sentences':sentences_list,'tags':tags_list}
+    return {'sentences': sentences_list, 'tags': tags_list}
 
 def load_data(config):
     data_dir=config.data_path
@@ -91,20 +84,25 @@ class Metrics:
             if label.startswith('B-'):
                 self.entity_types.add(label[2:])  
         self.entity_types = sorted(self.entity_types)
-        self.all_true_entities = []
-        self.all_pred_entities = []
+        
         self._counts = None
+        self.all_true_entities = set()
+        self.all_pred_entities = set()
+        self.seq_count = 0  
+        self.result_df = None
         
     def add(self, predictions, labels):    
         predictions = predictions.tolist()
         labels = labels.tolist()
-        for pred_seq, label_seq in zip(predictions, labels):
         
+        for pred_seq, label_seq in zip(predictions, labels):
             pred_str = [self.id2label.get(p, 'O') if p != -100 else 'O' for p in pred_seq]
             true_str = [self.id2label.get(l, 'O') if l != -100 else 'O' for l in label_seq]
-            self.all_true_entities.extend(self._extract_entities(true_str))
-            self.all_pred_entities.extend(self._extract_entities(pred_str))
-    def _extract_entities(self, tags):
+            self.all_true_entities.update(self._extract_entities(true_str, self.seq_count))
+            self.all_pred_entities.update(self._extract_entities(pred_str, self.seq_count))
+            self.seq_count += 1
+
+    def _extract_entities(self, tags,seq_id):
         entities =[]
         i=0
         while i<len(tags):
@@ -115,19 +113,18 @@ class Metrics:
                 while i<len(tags) and tags[i]=='I-'+entity_type:
                     i+=1
                 end=i
-                entities.append((entity_type,start,end))
+                entities.append((seq_id,entity_type,start,end))
             else:
                 i+=1
         return entities
 
 
     def reset(self):
-        self.all_true_entities = []
-        self.all_pred_entities = []
-        self._counts = None
-        self.confusion_matrix = [[0 for _ in range(len(self.entity_types))] 
-                                  for _ in range(len(self.entity_types))]
+        self.all_true_entities = set()
+        self.all_pred_entities = set()
+        self.seq_count = 0  
         self.result_df = None
+
     
     def _compute_counts(self):
         true_list = self.all_true_entities   
