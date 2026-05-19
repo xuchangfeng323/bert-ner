@@ -116,12 +116,12 @@ class Trainer:
         eval_accuracy=correct_samples/total_samples
         avg_eval_loss = total_eval_loss / len(devdataLoader)
         print(f"Eval Loss: {avg_eval_loss:.4f}")
-        print(f"Eval F1 Score: {results_dict['micro_avg']['f1_score']:.4f}")
+        print(f"Eval F1 Score: {results_dict['micro_avg']['f1']:.4f}")
         print(f"Eval Accuracy: {eval_accuracy:.4f}")
         swanlab.log({
             "eval/loss": avg_eval_loss,
             
-            "eval/f1": results_dict['micro_avg']['f1_score'],
+            "eval/f1": results_dict['micro_avg']['f1'],
             
         })
 
@@ -149,7 +149,7 @@ class Trainer:
         avg_test_loss = total_test_loss / len(testdataLoader)
          
         
-        print(f"Test F1 Score: {results_dict['micro_avg']['f1_score']:.4f}")
+        print(f"Test F1 Score: {results_dict['micro_avg']['f1']:.4f}")
         self.metrics.reset()
         log_dict = {
             "test/results": results_dict
@@ -157,7 +157,7 @@ class Trainer:
         write_log(self.log_dir, {"test": log_dict})
         swanlab.log({
             "test/loss": avg_test_loss,
-            "test/f1": results_dict['micro_avg']['f1_score'],
+            "test/f1": results_dict['micro_avg']['f1'],
             
         })
         print(results)

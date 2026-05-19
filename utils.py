@@ -3,7 +3,6 @@ import pandas as pd
 from transformers import BertTokenizerFast
 from MyDataset import WeiboNerDataset
 import torch
-
 import json
 import numpy as np
 global label2id, id2label
@@ -76,9 +75,10 @@ def write_log(log_jsonl_path, log_dict):
     with open(log_jsonl_path, "a", encoding="utf-8") as f:
         f.write(json.dumps(log_dict, ensure_ascii=False) + "\n")
 class Metrics:
-    def __init__(self,label2id,id2label):
+    def __init__(self,label2id,id2label,eps=1e-8):
         self.id2label = id2label
         self.label2id = label2id
+        self.eps = eps
         self.entity_types = set()
         for idx, label in id2label.items():
             if label.startswith('B-'):
@@ -126,121 +126,47 @@ class Metrics:
         self.result_df = None
 
     
-    def _compute_counts(self):
-        true_list = self.all_true_entities   
-        pred_list = self.all_pred_entities
-        counts = {etype: {'tp': 0, 'fp': 0, 'fn': 0} for etype in self.entity_types}
-        matched_true = [False] * len(true_list)
-        matched_pred = [False] * len(pred_list)
-        for i, etype in enumerate(true_list):
-            if matched_true[i]:
-                continue
-            true_type,true_start, true_end = etype[0],etype[1], etype[2]
-            for j, etype_j in enumerate(pred_list):
-                if matched_pred[j]:
-                    continue
-                pre_type,pre_strat,pre_end=etype_j[0],etype_j[1], etype_j[2]
-                if etype_j == etype:
-                    counts[etype[0]]['tp'] += 1
-                    matched_true[i] = True
-                    matched_pred[j] = True
-                    break
-        for i, true_ent in enumerate(true_list):
-            if not matched_true[i]:
-                etype = true_ent[0]
-                counts[etype]['fn'] += 1
-        for i, pred_ent in enumerate(pred_list):
-            if not matched_pred[i]:
-                
-                counts[pred_ent[0]]['fp'] += 1
-        self._counts = counts
-        return counts
-    def precision(self, entity_type=None):
-       
-        if self._counts is None:
-            self._compute_counts()
-        counts = self._counts
-        if entity_type is not None:
-            if entity_type not in counts:
-                return 0.0
-            tp = counts[entity_type]['tp']
-            fp = counts[entity_type]['fp']
-            return tp / (tp + fp) if (tp + fp) > 0 else 0.0
-        else:
-            # 宏观平均（所有类别未加权平均）
-            if not counts:
-                return 0.0
-            total_prec = sum(self.precision(et) for et in self.entity_types)
-            return total_prec / len(self.entity_types)
-    def recall(self, entity_type=None):
-        
-        if self._counts is None:
-            self._compute_counts()
-        counts = self._counts
-        if entity_type is not None:
-            if entity_type not in counts:
-                return 0.0
-            tp = counts[entity_type]['tp']
-            fn = counts[entity_type]['fn']
-            return tp / (tp + fn) if (tp + fn) > 0 else 0.0
-        else:
-            if not counts:
-                return 0.0
-            total_rec = sum(self.recall(et) for et in self.entity_types)
-            return total_rec / len(self.entity_types)
     
-    def f1_score(self, entity_type=None):
-        if entity_type is not None:
-            p = self.precision(entity_type)
-            r = self.recall(entity_type)
-            return 2 * p * r / (p + r) if (p + r) > 0 else 0.0
-        else:
-    
-            p = self.precision()
-            r = self.recall()
-            return 2 * p * r / (p + r) if (p + r) > 0 else 0.0
     def get_results(self):
        
-        counts = self._compute_counts()
-        
-        p_list = []
-        r_list = []
-        f1_list = []
-        support_list = []   # 真实实体数量（FN+TP）
-        
+        counts = {etype: {'tp': 0, 'fp': 0, 'fn': 0} for etype in self.entity_types}
+        for true_entity in self.all_true_entities:
+            for ent in self.all_pred_entities:
+                etype=true_entity[1]
+                if etype not in counts:
+                    continue
+                if ent in self.all_pred_entities:
+                    counts[etype]['tp'] += 1
+                elif ent[0] == true_entity[0]:
+                    counts[etype]['fn'] += 1
+        for ent in self.all_pred_entities:
+            etype=ent[1]
+            if etype not in counts:
+                continue
+            if ent not in self.all_true_entities:
+                counts[etype]['fp'] += 1
+        results=[]
         for etype in self.entity_types:
-            p = self.precision(etype)
-            r = self.recall(etype)
-            f1 = self.f1_score(etype)
-            support = counts[etype]['tp'] + counts[etype]['fn']
-            p_list.append(p)
-            r_list.append(r)
-            f1_list.append(f1)
-            support_list.append(support)
-        
-       
-        df = pd.DataFrame({
-            'precision': p_list,
-            'recall': r_list,
-            'f1_score': f1_list,
-            'support': support_list
-        }, index=self.entity_types)
-        
-       
-        df.loc['macro_avg'] = df[['precision', 'recall', 'f1_score']].mean()
-        df.loc['macro_avg', 'support'] = float('nan')
-        
-        
-        total_tp = sum(v['tp'] for v in counts.values())
-        total_fp = sum(v['fp'] for v in counts.values())
-        total_fn = sum(v['fn'] for v in counts.values())
-        micro_p = total_tp / (total_tp + total_fp) if (total_tp + total_fp) > 0 else 0.0
-        micro_r = total_tp / (total_tp + total_fn) if (total_tp + total_fn) > 0 else 0.0
-        micro_f1 = 2 * micro_p * micro_r / (micro_p + micro_r) if (micro_p + micro_r) > 0 else 0.0
+            tp,fn,fp = counts[etype]['tp'],counts[etype]['fn'],counts[etype]['fp']
+            precision = tp / (tp + fp + self.eps)
+            recall = tp / (tp + fn + self.eps)
+            f1 = 2 * precision * recall / (precision + recall + self.eps)
+            results.append({'etype':etype,'precision':precision,'recall':recall,'f1':f1,"support":tp+fn})
+        df = pd.DataFrame(results,index=self.entity_types)
+        if not df.empty:
+            df.loc['macro_avg'] = df[['precision', 'recall', 'f1_score']].mean()
+            df.loc['macro_avg', 'support'] = float('nan')
+        total_tp = sum(c['tp'] for c in counts.values())
+        total_fp = sum(c['fp'] for c in counts.values())
+        total_fn = sum(c['fn'] for c in counts.values())
+        micro_p = total_tp / (total_tp + total_fp + self.eps) 
+        micro_r = total_tp / (total_tp + total_fn + self.eps) 
+        micro_f1 = 2 * micro_p * micro_r / (micro_p + micro_r) 
         df.loc['micro_avg'] = [micro_p, micro_r, micro_f1, float('nan')]
-        
         self.result_df = df
         return df
+                
+        
     
     def get_result_dict(self):
         
