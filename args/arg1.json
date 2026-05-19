@@ -13,5 +13,6 @@
     "patience":5,
     "monitor": "val_f1",
     "delta":0.0001,
-    "save_dir": "./checkpoint"
+    "save_dir": "./checkpoint",
+    "eps":1e-8
 }

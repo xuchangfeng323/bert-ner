@@ -18,7 +18,7 @@ class Trainer:
         self.config=config
         self.loss_fn = nn.CrossEntropyLoss()
         print(config.get_args_dict())
-        self.metrics = Metrics(config.label2id,config.id2label)
+        self.metrics = Metrics(config.label2id,config.id2label,config.eps)
         self.best_accuracy = 0.0
         self.save_dir = get_next(config.save_dir)
         self.early_stop = EarlyStop(config, self.save_dir)
