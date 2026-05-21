@@ -5,9 +5,10 @@ from tqdm import tqdm
 import torch
 from model import Bert4NER
 import argparse
-from utils import load_data
+
 import torch.nn as nn
-from utils import get_next,write_log,Arguments,Metrics
+from transformers import AutoTokenizer, get_scheduler
+from utils import get_next,write_log,Arguments,Metrics,load_data
 import os
 class Trainer:
     def __init__(self,config):
@@ -23,12 +24,18 @@ class Trainer:
         self.save_dir = get_next(config.save_dir)
         self.early_stop = EarlyStop(config, self.save_dir)
         self.log_dir=os.path.join(self.save_dir,"log.jsonl")
+        self.scheduler=None
         
-    def train(self,traindataLoader, devdataLoader, testdataLoader, model,optimizer, scheduler):
+    def train(self,traindataLoader, devdataLoader, testdataLoader, model,optimizer):
         self.optimizer=optimizer
+        self.scheduler=get_scheduler(
+            "linear",
+            optimizer,
+            num_warmup_steps=self.config.warmup_steps,
+            num_training_steps=self.num_epochs * len(traindataLoader)
+        )
         self.model=model
         model.to(self.device)
-        self.scheduler=scheduler
         swanlab.init(
             project="weibo_ner",  
             name="bert4ner",                
@@ -72,10 +79,10 @@ class Trainer:
                 "train/loss": avg_train_loss,
                 "eval/loss": avg_eval_loss,
                 
-                "eval/f1": results_dict['micro_avg']['f1_score'],
+                "eval/f1": results_dict['micro_avg']['f1'],
                 "eval/results": results_dict
             }
-            f1=results_dict['micro_avg']['f1_score']
+            f1=results_dict['micro_avg']['f1']
             write_log(self.log_dir, log_dict)
             if self.scheduler is not None:
                 self.scheduler.step(avg_eval_loss)
@@ -132,7 +139,7 @@ class Trainer:
         self.model.load_state_dict(checkpoint["model"])  
         self.model = self.model.to(self.device)
         self.model.eval()
-        total_test_loss = 0
+        
 
         progress_bar = tqdm(testdataLoader, desc="Testing", position=0, leave=True)
         with torch.no_grad():
@@ -146,7 +153,7 @@ class Trainer:
                 self.metrics.add(predictions, labels)
         results = self.metrics.get_results()
         results_dict = self.metrics.get_result_dict()
-        avg_test_loss = total_test_loss / len(testdataLoader)
+        
          
         
         print(f"Test F1 Score: {results_dict['micro_avg']['f1']:.4f}")
@@ -156,7 +163,6 @@ class Trainer:
         }
         write_log(self.log_dir, {"test": log_dict})
         swanlab.log({
-            "test/loss": avg_test_loss,
             "test/f1": results_dict['micro_avg']['f1'],
             
         })
@@ -169,7 +175,7 @@ if __name__ == "__main__":
     traindataLoader, devdataLoader, testdataLoader,label2id,id2label = load_data(args)
     args.set_mapping(label2id,id2label)
     model=Bert4NER(args)
-    optimizer, scheduler = model.get_optimizer()
+    optimizer = model.get_optimizer()
     trainer=Trainer(args)
     trainer.train(traindataLoader, devdataLoader, testdataLoader, model, optimizer, scheduler)
    

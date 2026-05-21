@@ -143,7 +143,7 @@ class Metrics:
             if etype not in counts:
                 continue
             if ent not in self.all_true_entities:
-                counts[etype]['fp'] += 1
+                counts[etype]['fn'] += 1
         results=[]
         for etype in self.entity_types:
             tp,fn,fp = counts[etype]['tp'],counts[etype]['fn'],counts[etype]['fp']
@@ -169,7 +169,7 @@ class Metrics:
     
     def get_result_dict(self):
         
-        if not hasattr(self, 'result_df'):
+        if self.result_df is None:
             df = self.get_results()
         else:
             df = self.result_df

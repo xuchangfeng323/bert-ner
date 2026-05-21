@@ -4,6 +4,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from utils import Arguments
 import torch.nn as nn
 
+
 class Bert4NER(nn.Module):
     def __init__(self,config):
         super().__init__()
@@ -20,5 +21,5 @@ class Bert4NER(nn.Module):
         return logits
     def get_optimizer(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
-        lr_scheduler = ReduceLROnPlateau(optimizer, patience=2, verbose=1, factor=0.1)
-        return optimizer, lr_scheduler
+        
+        return optimizer
