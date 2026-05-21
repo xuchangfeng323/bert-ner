@@ -177,6 +177,6 @@ if __name__ == "__main__":
     model=Bert4NER(args)
     optimizer = model.get_optimizer()
     trainer=Trainer(args)
-    trainer.train(traindataLoader, devdataLoader, testdataLoader, model, optimizer, scheduler)
+    trainer.train(traindataLoader, devdataLoader, testdataLoader, model, optimizer)
    
         
