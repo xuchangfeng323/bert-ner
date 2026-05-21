@@ -26,6 +26,7 @@ class Trainer:
         self.log_dir=os.path.join(self.save_dir,"log.jsonl")
         self.scheduler=None
         
+    
     def train(self,traindataLoader, devdataLoader, testdataLoader, model,optimizer):
         self.optimizer=optimizer
         self.scheduler=get_scheduler(
