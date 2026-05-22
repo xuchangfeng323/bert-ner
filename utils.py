@@ -138,11 +138,11 @@ class Metrics:
                 counts[etype]['tp'] += 1
             else:
                 counts[etype]['fp'] += 1
-        for ent in self.all_pred_entities:
+        for ent in self.all_true_entities:
             etype=ent[1]
             if etype not in counts:
                 continue
-            if ent not in self.all_true_entities:
+            if ent not in self.all_pred_entities:
                 counts[etype]['fn'] += 1
         results=[]
         for etype in self.entity_types:
@@ -150,7 +150,7 @@ class Metrics:
             precision = tp / (tp + fp + self.eps)
             recall = tp / (tp + fn + self.eps)
             f1 = 2 * precision * recall / (precision + recall + self.eps)
-            results.append({'etype':etype,'precision':precision,'recall':recall,'f1':f1,"support":tp+fn})
+            results.append({'precision':precision,'recall':recall,'f1':f1,"support":tp+fn})
         df = pd.DataFrame(results,index=self.entity_types)
         if not df.empty:
             df.loc['macro_avg'] = df[['precision', 'recall', 'f1']].mean()
@@ -160,7 +160,7 @@ class Metrics:
         total_fn = sum(c['fn'] for c in counts.values())
         micro_p = total_tp / (total_tp + total_fp + self.eps) 
         micro_r = total_tp / (total_tp + total_fn + self.eps) 
-        micro_f1 = 2 * micro_p * micro_r / (micro_p + micro_r) 
+        micro_f1 = 2 * micro_p * micro_r / (micro_p + micro_r + self.eps)
         df.loc['micro_avg'] = [micro_p, micro_r, micro_f1, float('nan')]
         self.result_df = df
         return df

@@ -87,7 +87,7 @@ class Trainer:
             write_log(self.log_dir, log_dict)
             if self.scheduler is not None:
                 self.scheduler.step(avg_eval_loss)
-            if self.early_stop(epoch,avg_eval_loss,eval_accuracy,f1, model,optimizer,scheduler):
+            if self.early_stop(epoch,avg_eval_loss,eval_accuracy,f1, model,optimizer,self.scheduler):
                 break
 
         self.test(testdataLoader)

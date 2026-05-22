@@ -2,7 +2,7 @@ from torch.utils.data import Dataset
 from transformers import BertTokenizer
 import torch
 from torch.utils.data import DataLoader
-import pandas as pd
+
 class WeiboNerDataset(Dataset):
     def __init__(self, data, tokenizer=None, max_length=128,label2id=None,align_type='ignore'):
         self.align_type=align_type

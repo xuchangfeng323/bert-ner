@@ -1,6 +1,6 @@
 from transformers import BertModel
 import torch
-from torch.optim.lr_scheduler import ReduceLROnPlateau
+
 from utils import Arguments
 import torch.nn as nn
 
