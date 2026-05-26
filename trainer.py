@@ -63,6 +63,8 @@ class Trainer:
                 loss=self.loss_fn(logits.view(-1, logits.size(-1)), labels.view(-1))
                 loss.backward()
                 self.optimizer.step()
+                if self.scheduler is not None:
+                    self.scheduler.step()
                 total_train_loss += loss.item()
                 progress_bar.set_postfix({"Loss": loss.item()})
                 if step % 50 == 0:
@@ -85,8 +87,7 @@ class Trainer:
             }
             f1=results_dict['micro_avg']['f1']
             write_log(self.log_dir, log_dict)
-            if self.scheduler is not None:
-                self.scheduler.step(avg_eval_loss)
+            
             if self.early_stop(epoch,avg_eval_loss,eval_accuracy,f1, model,optimizer,self.scheduler):
                 break
 

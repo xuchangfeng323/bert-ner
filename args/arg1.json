@@ -10,7 +10,7 @@
     "embedding_dim": 768,
     "data_path": "./data/",
     "max_length": 128,
-    "patience":5,
+    "patience":10,
     "monitor": "val_f1",
     "delta":0.0001,
     "save_dir": "./checkpoint",
