@@ -84,8 +84,6 @@ class Metrics:
             if label.startswith('B-'):
                 self.entity_types.add(label[2:])  
         self.entity_types = sorted(self.entity_types)
-        
-        self._counts = None
         self.all_true_entities = set()
         self.all_pred_entities = set()
         self.seq_count = 0  
@@ -235,7 +233,7 @@ class EarlyStop():
                 
                 if self.counter > self.patience:
                     self.early_stop = True
-                    self.save_checkpoint(model, optimizer, scheduler, epoch,acc,False)
+                    self.save_checkpoint(model, optimizer, scheduler, epoch,loss,True)
             else:
                 self.best_score = loss
                 self.counter = 0
@@ -259,7 +257,7 @@ class EarlyStop():
                 self.save_checkpoint(model, optimizer, scheduler, epoch,f1_score,True)
         if epoch==self.config.num_epochs-1:
             self.save_checkpoint(model, optimizer, scheduler, epoch,acc,False)
-            return
+            return 
         return self.early_stop
         
     def save_checkpoint(self, model, optimizer, scheduler, epoch, dev_metrics,is_best):
