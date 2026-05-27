@@ -233,7 +233,7 @@ class EarlyStop():
                 
                 if self.counter > self.patience:
                     self.early_stop = True
-                    self.save_checkpoint(model, optimizer, scheduler, epoch,loss,True)
+                    self.save_checkpoint(model, optimizer, scheduler, epoch,loss,False)
             else:
                 self.best_score = loss
                 self.counter = 0
@@ -250,7 +250,7 @@ class EarlyStop():
                 
                 if self.counter > self.patience:
                     self.early_stop = True
-                    self.save_checkpoint(model, optimizer, scheduler, epoch,acc,False)
+                    self.save_checkpoint(model, optimizer, scheduler, epoch,f1_score,False)
             else:
                 self.best_score = f1_score
                 self.counter = 0
