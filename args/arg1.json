@@ -1,7 +1,7 @@
 {
     "num_epochs": 30,
     "batch_size": 64,
-    "lr": 1e-5,
+    "lr": 5e-5,
     "weight_decay": 0.01,
     "device": "cuda:0",
     "model_dir": "../bert-base-chinese",
