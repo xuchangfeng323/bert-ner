@@ -1,14 +1,11 @@
-from utils import Metrics
-from utils import EarlyStop
 import swanlab
 from tqdm import tqdm
 import torch
 from model import Bert4NER
 import argparse
-
 import torch.nn as nn
-from transformers import AutoTokenizer, get_scheduler
-from utils import get_next,write_log,Arguments,Metrics,load_data
+from transformers import  get_scheduler
+from utils import get_next, write_log, Arguments, Metrics, EarlyStop, load_data
 import os
 class Trainer:
     def __init__(self,config):

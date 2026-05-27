@@ -256,7 +256,12 @@ class EarlyStop():
                 self.counter = 0
                 self.save_checkpoint(model, optimizer, scheduler, epoch,f1_score,True)
         if epoch==self.config.num_epochs-1:
-            self.save_checkpoint(model, optimizer, scheduler, epoch,acc,False)
+            if self.monitor == 'val_acc':
+                self.save_checkpoint(model, optimizer, scheduler, epoch,acc,False)
+            elif self.monitor == 'val_loss':
+                self.save_checkpoint(model, optimizer, scheduler, epoch,loss,False)
+            elif self.monitor == 'val_f1':
+                self.save_checkpoint(model, optimizer, scheduler, epoch,f1_score,False)
             return 
         return self.early_stop
         

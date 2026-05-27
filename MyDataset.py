@@ -67,6 +67,8 @@ class WeiboNerDataset(Dataset):
                             tag = 'O'
                         else:
                             tag = labels[word_idx]
+                            if tag.startswith('B-'):
+                                tag = 'I-' + tag[2:]
                         label_ids.append(self.label2id.get(tag, self.label2id['O']))
                 
             
