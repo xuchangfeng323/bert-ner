@@ -39,32 +39,21 @@ def build_label_mappings(labels, save_path=None):
     
     return label2id, id2label
 
-def get_sentences(dir_path):
-    with open(dir_path, encoding='utf-8') as f:
-        blocks = f.read().strip().split('\n\n')
-    
-    sentences_list, tags_list = [], []
-    for block in blocks:
-        pairs = [line.split() for line in block.split('\n') if len(line.split()) == 2]
-        if pairs:
-            words, tags = zip(*pairs)
-            sentences_list.append(list(words))
-            tags_list.append(list(tags))
-            
-    return {'sentences': sentences_list, 'tags': tags_list}
+
 
 def load_data(config):
     data_dir=config.data_path
-    train_data = get_sentences(os.path.join(data_dir, 'train.txt'))
-    test_data = get_sentences(os.path.join(data_dir, 'test.txt'))
-    dev_data = get_sentences(os.path.join(data_dir, 'dev.txt'))
-    label2id, id2label = build_label_mappings(train_data['tags']+test_data['tags']+dev_data['tags'], save_path=os.path.join(data_dir, 'label2id.json'))
-    config.set_mapping(label2id,id2label)
-    tokenizer = BertTokenizerFast.from_pretrained(config.model_dir)
-    train_dataset = WeiboNerDataset(train_data, tokenizer, config.max_length, label2id, config.align_type)
-    test_dataset = WeiboNerDataset(test_data, tokenizer, config.max_length, label2id, config.align_type)
-    dev_dataset = WeiboNerDataset(dev_data, tokenizer, config.max_length, label2id, config.align_type)
+    train_dataset = WeiboNerDataset(os.path.join(data_dir, 'train.txt'), tokenizer, config.max_length, config.align_type)
+    test_dataset = WeiboNerDataset(os.path.join(data_dir, 'test.txt'), tokenizer, config.max_length, config.align_type)
+    dev_dataset = WeiboNerDataset(os.path.join(data_dir, 'dev.txt'), tokenizer, config.max_length, config.align_type)
 
+    label2id, id2label = build_label_mappings(train_dataset.label_list+test_dataset.label_list+dev_dataset.label_list, save_path=os.path.join(data_dir, 'label2id.json'))
+    config.set_mapping(label2id,id2label)
+    train_dataset.set_label2id(label2id)
+    test_dataset.set_label2id(label2id)
+    dev_dataset.set_label2id(label2id)
+    
+    
     train_dataLoader = train_dataset.get_data_loader(batch_size=config.batch_size)
     dev_dataLoader = dev_dataset.get_data_loader(batch_size=config.batch_size,shuffle=False)
     test_dataLoader = test_dataset.get_data_loader(batch_size=config.batch_size,shuffle=False)
@@ -291,6 +280,7 @@ class Arguments:
         self.id2label=None
         for key, value in self.args_dict.items():
             setattr(self, key, value)
+        self.tokenizer = BertTokenizerFast.from_pretrained(self.model_dir)
         
     def _load_json_config(self, config_path):
         if os.path.exists(config_path):

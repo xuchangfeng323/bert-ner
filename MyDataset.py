@@ -4,11 +4,12 @@ import torch
 from torch.utils.data import DataLoader
 
 class WeiboNerDataset(Dataset):
-    def __init__(self, data, tokenizer=None, max_length=128,label2id=None,align_type='ignore'):
+    def __init__(self, data_path, tokenizer=None, max_length=128,align_type='ignore'):
         self.align_type=align_type
-        self.texts = data['sentences']
-        self.label_list = data['tags']
-        self.label2id=label2id
+        self.texts = []
+        self.label_list = []
+        self.get_sentences(data_path)
+        self.label2id=None
         if tokenizer is None:
             tokenizer = BertTokenizer.from_pretrained('../bert-base-chinese')
         self.tokenizer = tokenizer
@@ -22,6 +23,20 @@ class WeiboNerDataset(Dataset):
             'text': text,
             'labels': label
         }
+    def get_sentences(dir_path):
+        with open(dir_path, encoding='utf-8') as f:
+            blocks = f.read().strip().split('\n\n')
+        
+        sentences_list, tags_list = [], []
+        for block in blocks:
+            pairs = [line.split() for line in block.split('\n') if len(line.split()) == 2]
+            if pairs:
+                words, tags = zip(*pairs)
+                sentences_list.append(list(words))
+                tags_list.append(list(tags))
+            
+        self.texts = sentences_list
+        self.label_list = tags_list
     def collate_fn(self, batch):
         
         texts = [item['text'] for item in batch]
