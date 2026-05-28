@@ -84,7 +84,8 @@ class Metrics:
         labels = labels.tolist()
         
         for pred_seq, label_seq in zip(predictions, labels):
-            pred_str = [self.id2label.get(p, 'O') for p in pred_seq if p != -100]
+            
+            pred_str = [self.id2label.get(p, 'O') for p, l in zip(pred_seq, label_seq) if l != -100]
             true_str = [self.id2label.get(l, 'O') for l in label_seq if l != -100]
             self.all_true_entities.update(self._extract_entities(true_str, self.seq_count))
             self.all_pred_entities.update(self._extract_entities(pred_str, self.seq_count))
@@ -138,10 +139,10 @@ class Metrics:
             df.loc['macro_avg'] = df[['precision', 'recall', 'f1']].mean()
             df.loc['macro_avg', 'support'] = float('nan')
         total_tp = sum(c['tp'] for c in counts.values())
-        total_fp = sum(c['fp'] for c in counts.values())
-        total_fn = sum(c['fn'] for c in counts.values())
-        micro_p = total_tp / (total_tp + total_fp + self.eps) 
-        micro_r = total_tp / (total_tp + total_fn + self.eps) 
+        total_pre = sum(pre_counts.values())
+        total_true=sum(true_counts.values())
+        micro_p = total_tp / ( total_pre + self.eps) 
+        micro_r = total_tp / ( total_true + self.eps) 
         micro_f1 = 2 * micro_p * micro_r / (micro_p + micro_r + self.eps)
         df.loc['micro_avg'] = [micro_p, micro_r, micro_f1, float('nan')]
         self.result_df = df

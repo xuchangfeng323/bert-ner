@@ -23,7 +23,7 @@ class WeiboNerDataset(Dataset):
             'text': text,
             'labels': label
         }
-    def get_sentences(dir_path):
+    def get_sentences(self,dir_path):
         with open(dir_path, encoding='utf-8') as f:
             blocks = f.read().strip().split('\n\n')
         
