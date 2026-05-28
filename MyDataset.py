@@ -37,6 +37,8 @@ class WeiboNerDataset(Dataset):
             
         self.texts = sentences_list
         self.label_list = tags_list
+    def set_label2id(self, label2id):
+        self.label2id=label2id
     def collate_fn(self, batch):
         
         texts = [item['text'] for item in batch]

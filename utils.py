@@ -43,9 +43,9 @@ def build_label_mappings(labels, save_path=None):
 
 def load_data(config):
     data_dir=config.data_path
-    train_dataset = WeiboNerDataset(os.path.join(data_dir, 'train.txt'), tokenizer, config.max_length, config.align_type)
-    test_dataset = WeiboNerDataset(os.path.join(data_dir, 'test.txt'), tokenizer, config.max_length, config.align_type)
-    dev_dataset = WeiboNerDataset(os.path.join(data_dir, 'dev.txt'), tokenizer, config.max_length, config.align_type)
+    train_dataset = WeiboNerDataset(os.path.join(data_dir, 'train.txt'), config.tokenizer, config.max_length, config.align_type)
+    test_dataset = WeiboNerDataset(os.path.join(data_dir, 'test.txt'), config.tokenizer, config.max_length, config.align_type)
+    dev_dataset = WeiboNerDataset(os.path.join(data_dir, 'dev.txt'), config.tokenizer, config.max_length, config.align_type)
 
     label2id, id2label = build_label_mappings(train_dataset.label_list+test_dataset.label_list+dev_dataset.label_list, save_path=os.path.join(data_dir, 'label2id.json'))
     config.set_mapping(label2id,id2label)
