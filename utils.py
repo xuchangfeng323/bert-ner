@@ -5,6 +5,7 @@ from MyDataset import WeiboNerDataset
 import torch
 import json
 import numpy as np
+from collections import Counter
 global label2id, id2label
 def get_next(prefix_dir):
     if not os.path.exists(prefix_dir):
@@ -83,8 +84,8 @@ class Metrics:
         labels = labels.tolist()
         
         for pred_seq, label_seq in zip(predictions, labels):
-            pred_str = [self.id2label.get(p, 'O') if p != -100 else 'O' for p in pred_seq]
-            true_str = [self.id2label.get(l, 'O') if l != -100 else 'O' for l in label_seq]
+            pred_str = [self.id2label.get(p, 'O') for p in pred_seq if p != -100]
+            true_str = [self.id2label.get(l, 'O') for l in label_seq if l != -100]
             self.all_true_entities.update(self._extract_entities(true_str, self.seq_count))
             self.all_pred_entities.update(self._extract_entities(pred_str, self.seq_count))
             self.seq_count += 1
@@ -116,28 +117,22 @@ class Metrics:
     
     def get_results(self):
        
-        counts = {etype: {'tp': 0, 'fp': 0, 'fn': 0} for etype in self.entity_types}
+        counts = {etype: {'tp': 0} for etype in self.entity_types}
         for pred in self.all_pred_entities:
             etype = pred[1]
             if etype not in counts:
                 continue
             if pred in self.all_true_entities:
                 counts[etype]['tp'] += 1
-            else:
-                counts[etype]['fp'] += 1
-        for ent in self.all_true_entities:
-            etype=ent[1]
-            if etype not in counts:
-                continue
-            if ent not in self.all_pred_entities:
-                counts[etype]['fn'] += 1
+        pre_counts = Counter(item[1] for item in self.all_pred_entities)
+        true_counts = Counter(item[1] for item in self.all_true_entities)
         results=[]
         for etype in self.entity_types:
-            tp,fn,fp = counts[etype]['tp'],counts[etype]['fn'],counts[etype]['fp']
-            precision = tp / (tp + fp + self.eps)
-            recall = tp / (tp + fn + self.eps)
+            tp = counts[etype]['tp']
+            precision = tp / ( pre_counts[etype] + self.eps)
+            recall = tp / (true_counts[etype] + self.eps)
             f1 = 2 * precision * recall / (precision + recall + self.eps)
-            results.append({'precision':precision,'recall':recall,'f1':f1,"support":tp+fn})
+            results.append({'precision':precision,'recall':recall,'f1':f1,"support":true_counts[etype]})
         df = pd.DataFrame(results,index=self.entity_types)
         if not df.empty:
             df.loc['macro_avg'] = df[['precision', 'recall', 'f1']].mean()
