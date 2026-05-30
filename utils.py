@@ -1,4 +1,5 @@
 import os
+import random
 import pandas as pd
 from transformers import BertTokenizerFast
 from MyDataset import WeiboNerDataset
@@ -276,8 +277,18 @@ class Arguments:
         self.id2label=None
         for key, value in self.args_dict.items():
             setattr(self, key, value)
+        self._set_seed()
         self.tokenizer = BertTokenizerFast.from_pretrained(self.model_dir)
         
+    def _set_seed(self):
+        seed = self.args_dict.get('seed', 42)
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+
     def _load_json_config(self, config_path):
         if os.path.exists(config_path):
             with open(config_path, 'r', encoding='utf-8') as f:
