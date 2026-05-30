@@ -95,10 +95,7 @@ class Trainer:
         
     def eval(self,epoch, devdataLoader):
         self.model.eval()
-        
         total_eval_loss = 0
-        total_samples = 0
-        correct_samples = 0
         progress_bar = tqdm(devdataLoader, desc="Evaluation", position=0, leave=True)
         with torch.no_grad():
             for input_ids, attention_mask, labels in progress_bar:
@@ -111,19 +108,15 @@ class Trainer:
                 loss = loss_fn(logits.view(-1, logits.size(-1)), labels.view(-1))
                 total_eval_loss += loss.item()
                 predictions = torch.argmax(logits, dim=-1)
-                total_samples += labels.view(-1).size(0)
-                correct_samples += (predictions.view(-1) == labels.view(-1)).sum().item()
-                
                 self.metrics.add(predictions, labels)
         results = self.metrics.get_results()
         print(results)
         results_dict = self.metrics.get_result_dict()
         self.metrics.reset()
-        eval_accuracy=correct_samples/total_samples
         avg_eval_loss = total_eval_loss / len(devdataLoader)
         print(f"Eval Loss: {avg_eval_loss:.4f}")
         print(f"Eval F1 Score: {results_dict['micro_avg']['f1']:.4f}")
-        print(f"Eval Accuracy: {eval_accuracy:.4f}")
+        
         swanlab.log({
             "eval/loss": avg_eval_loss,
             
