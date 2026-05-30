@@ -9,7 +9,7 @@
     "align_type": "ignore",
     "embedding_dim": 768,
     "data_path": "./data/",
-    "max_length": 128,
+    "max_length": 512,
     "patience":10,
     "monitor": "val_f1",
     "delta":0.0001,
